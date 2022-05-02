@@ -1,1 +1,5 @@
+.vs code/
 
+__pycache__/
+
+raw_data/
