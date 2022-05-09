@@ -1,18 +1,18 @@
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.firefox.service import Service
+from webdriver_manager.firefox import GeckoDriverManager
+from webdriver_manager.chrome import ChromeDriverManager
 import shutil
 import time
 import uuid
 import json
 import os
 import urllib
-import urllib.request
 import sys
 import boto3
 import requests
-import psycopg2
 import pandas as pd
 import sqlalchemy
 
@@ -28,7 +28,9 @@ class Scrapper:
         Checks if 'accept cookies' button is present and bypasses it if present.
         """
 
-        self.driver = webdriver.Chrome(service = Service('./chromedriver'))
+        self.driver = webdriver.Firefox(service = Service(GeckoDriverManager().install()))
+        # self.driver = webdriver.Firefox(service = Service('/usr/local/bin/geckodriver'))
+        # self.driver = webdriver.Chrome(service=Service('./chromedriver'))
         self.driver.get("https://www.depop.com")
         try:
             self.driver.find_element(by=By.CSS_SELECTOR, value="button[class='sc-kEqXSa sc-iqAclL sc-ciSkZP hQtFsL cmWQHQ exduyW']").click()
@@ -196,7 +198,13 @@ class Scrapper:
         Returns:
             int: The status code of the HTTPS request.
         """
-        r = requests.get(self.driver.current_url)
+        passed = False
+        while passed == False:
+            try:
+                r = requests.get(self.driver.current_url)
+                passed = True
+            except requests.exceptions.InvalidSchema:
+                time.sleep(1)
         return r.status_code
         
 
@@ -211,13 +219,12 @@ class Scrapper:
         Returns:
             bool: False if page cannot be loaded sucessfully. True if page was loaded sucessfully.
         """
-        current_url = self.driver.current_url
         page_status = self.page_http_status()
         page_working = True
         print(page_status)
         if page_status >= 400:
             print("more than 400")
-            self.nav_by_url(current_url)
+            self.driver.refresh()
             time.sleep(2)
             try:
                 self.listing_url(2)
@@ -637,19 +644,30 @@ class Scrapper:
                 time.sleep(3)
                 try:
                     listing_url = self.listing_url(i)
-                except:
-                    scraped_data = {"ERROR": "Can't find any product listing"}
-                    print("CAN'T FIND ANY PRODUCT LISTING")
-                    product_listing_found = False
+                except IndexError:
+                    self.driver.get(parent_page_url)
+                    time.sleep(3)
+                    try:
+                        listing_url = self.listing_url(i)
+                    except IndexError:
+                        product_listing_found == False
+                        scraped_data = {"ERROR": "Can't find any product listing"}
+                        print("CAN'T FIND ANY PRODUCT LISTING")
+
+
             
             if product_listing_found == True:
                 print(listing_url)
                 self.open_url_new_tab(listing_url)
                 self.switch_tab(1)
                 page_status = self.page_http_status()
+                print(page_status)
+                print(self.driver.current_url)
                 if page_status >= 400:
+                    print('hi')
                     time.sleep(3)
-                    self.driver.get(listing_url)
+                    self.driver.refresh()
+
                 is_data_duplicated, index = self.check_is_duplicate(json_filepath, self.driver.current_url)
                 try:
                     rds_duplicate = self.check_duplicate_on_rds(self.driver.current_url, data_collection_folder_name)
@@ -673,7 +691,6 @@ class Scrapper:
                 pass
 
     
-
 
     def scrape_shop(self, shops, data_collection_folder_name):
         
@@ -896,10 +913,6 @@ if __name__ == "__main__":
 
     bot = Scrapper()
 
-    # bot.check_duplicate_on_rds("pleasefwjnk", "https://www.depop.com/products/moomies_-midi-skirt-beautiful-vintage-summer-3bc9/", "skirt_search")
-    # bot.download_rds("skirt_search")
-    # bot.df.head()
-
     skirt_search_data_collection = "skirt_search"
     skirt_search_json_path = bot.create_reset_json_file(skirt_search_data_collection)
     searches = ["black skirt", 'skirt black']
@@ -907,60 +920,46 @@ if __name__ == "__main__":
         bot.nav_by_search(searches[i])
         is_page_working = bot.check_initiate_scraping()
         if is_page_working == True:
-            bot.scrape_listing(50, skirt_search_json_path, skirt_search_data_collection)
+            bot.scrape_listing(5, skirt_search_json_path, skirt_search_data_collection)
         else:
             bot.do_not_scrape(skirt_search_json_path)
     bot.upload_to_rds(skirt_search_json_path, skirt_search_data_collection)
 
 
 
-    # cleopatress_listing_data_collection_name = "cleopatress_shop_listing"
-    # cleopatress_listing_json_file_path = bot.create_reset_json_file(cleopatress_listing_data_collection_name)
-    # bot.nav_by_shop("cleopatress")
-    # is_page_working = bot.check_initiate_scraping()
-    # if is_page_working == True:
-    #     bot.scrape_listing(100, cleopatress_listing_json_file_path, cleopatress_listing_data_collection_name)
-    # else:
-    #     bot.add_data_json({"HTTPS REQUEST ERROR WITH CODE": bot.page_http_status()}, cleopatress_listing_json_file_path)
-    # bot.upload_data_to_s3(cleopatress_listing_data_collection_name, cleopatress_listing_json_file_path, True)
+    cleopatress_listing_data_collection_name = "cleopatress_shop_listing"
+    cleopatress_listing_json_file_path = bot.create_reset_json_file(cleopatress_listing_data_collection_name)
+    bot.nav_by_shop("cleopatress")
+    is_page_working = bot.check_initiate_scraping()
+    if is_page_working == True:
+        bot.scrape_listing(100, cleopatress_listing_json_file_path, cleopatress_listing_data_collection_name)
+    else:
+        bot.add_data_json({"HTTPS REQUEST ERROR WITH CODE": bot.page_http_status()}, cleopatress_listing_json_file_path)
+    bot.upload_data_to_s3(cleopatress_listing_data_collection_name, cleopatress_listing_json_file_path, True)
 
 
 
 
-    # shop_front_data_collection_name = "store_front_data"
-    # shop_front_json_file_path = bot.create_reset_json_file(shop_front_data_collection_name)
-    # shops = ["cleopatress", "robinrebecca", "prettypiecess"]
-    # bot.scrape_shop(shops, shop_front_data_collection_name)
-    # bot.upload_data_to_s3(shop_front_data_collection_name, shop_front_json_file_path, False)
+    shop_front_data_collection_name = "store_front_data"
+    shop_front_json_file_path = bot.create_reset_json_file(shop_front_data_collection_name)
+    shops = ["cleopatress", "robinrebecca", "prettypiecess"]
+    bot.scrape_shop(shops, shop_front_data_collection_name)
+    bot.upload_data_to_s3(shop_front_data_collection_name, shop_front_json_file_path, False)
 
 
 
 
-    # header_data_collection_name = "header_listings"
-    # header_json_file_path = bot.create_reset_json_file(header_data_collection_name)
-    # header_url_list = bot.header_url_list()
-    # for header in header_url_list:
-    #     bot.nav_by_url(header)
-    #     is_page_working = bot.check_initiate_scraping()
-    #     if is_page_working == True:
-    #         bot.scrape_listing(1, header_json_file_path, header_data_collection_name)
-    #     else:
-    #         bot.add_data_json({"HTTPS REQUEST ERROR WITH CODE": bot.page_http_status()}, header_json_file_path)
-    # bot.upload_data_to_s3(header_data_collection_name, header_json_file_path, True)
-
-
-
-
-
-    # black_skirt_search_data_collection_name = "black_skirt_search"
-    # black_skirt_search_listing_json_file_path = bot.create_reset_json_file(black_skirt_search_data_collection_name)
-    # bot.nav_by_search("black skirt")
-    # is_page_working = bot.check_initiate_scraping()
-    # if is_page_working == True:
-    #     bot.scrape_listing(50, black_skirt_search_listing_json_file_path, black_skirt_search_data_collection_name)
-    # else:
-    #     bot.add_data_json({"HTTPS REQUEST ERROR WITH CODE": bot.page_http_status()}, black_skirt_search_listing_json_file_path)
-    # bot.upload_data_to_s3(black_skirt_search_data_collection_name, black_skirt_search_listing_json_file_path, True)
+    header_data_collection_name = "header_listings"
+    header_json_file_path = bot.create_reset_json_file(header_data_collection_name)
+    header_url_list = bot.header_url_list()
+    for header in header_url_list:
+        bot.nav_by_url(header)
+        is_page_working = bot.check_initiate_scraping()
+        if is_page_working == True:
+            bot.scrape_listing(1, header_json_file_path, header_data_collection_name)
+        else:
+            bot.add_data_json({"HTTPS REQUEST ERROR WITH CODE": bot.page_http_status()}, header_json_file_path)
+    bot.upload_data_to_s3(header_data_collection_name, header_json_file_path, True)
 
     bot.close_browser()
 
