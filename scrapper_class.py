@@ -3,7 +3,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.service import Service
 from webdriver_manager.firefox import GeckoDriverManager
-from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.firefox.options import Options
 import shutil
 import time
 import uuid
@@ -27,8 +27,10 @@ class Scrapper:
         """
         Checks if 'accept cookies' button is present and bypasses it if present.
         """
+        options = Options()
+        options.add_argument('--headless')
 
-        self.driver = webdriver.Firefox(service = Service(GeckoDriverManager().install()))
+        self.driver = webdriver.Firefox(service = Service(GeckoDriverManager().install()), options=options)
         # self.driver = webdriver.Firefox(service = Service('/usr/local/bin/geckodriver'))
         # self.driver = webdriver.Chrome(service=Service('./chromedriver'))
         self.driver.get("https://www.depop.com")
