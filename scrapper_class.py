@@ -912,6 +912,10 @@ class Scrapper:
 
 
 if __name__ == "__main__":
+    try:
+        os.mkdir('raw_data')
+    except FileExistsError:
+        pass
 
     bot = Scrapper()
 
